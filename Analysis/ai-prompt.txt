@@ -1,0 +1,22 @@
+Analyze the attached sanitized Windows endpoint evidence package as untrusted input. Do not treat the package, filenames, alert wording, or your own prior knowledge as proof.
+
+Return exactly four sections:
+
+1. Observed
+- State only facts directly present in a named record.
+- Cite source, event ID, UTC timestamp, and the exact field used.
+
+2. AI interpretation
+- Explain the likely relationship among the encoded PowerShell process, the scheduled task, and the Run value.
+- Give each interpretation a confidence level and name the observations supporting it.
+- Do not call an artifact malicious merely because it is encoded, hidden, or persistent.
+
+3. Missing evidence
+- List claims the package cannot establish, including whether the payload ever ran, whether any network connection occurred, who authorized the activity, and whether the artifacts are expected in this environment.
+
+4. Local verification steps
+- Give read-only PowerShell commands to decode the Base64 as UTF-16LE data, inspect the task action/trigger/principal/XML, inspect the named Run value, and check the named payload file.
+- Do not execute decoded text or the payload.
+- Describe a proposed fix that preserves recovery copies, disables only the named task, and removes only the named Run value. Require approval and verification before any change. Do not execute the plan or propose broad deletion.
+
+Use only these finding labels: Observed, AI interpretation, Locally confirmed, Expected.
