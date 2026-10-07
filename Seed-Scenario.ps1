@@ -1,8 +1,5 @@
-#Requires -RunAsAdministrator
-$ErrorActionPreference = 'Stop'
-
 $decodedScript = @'
-# WIN-AI-001: create a logon task and Run value for the same script.
+#WIN-AI-001: create a logon task and Run value for the same script.
 $ErrorActionPreference = 'Stop'
 $payload = 'C:\ProgramData\GloboMantics\TelemetryCheck.ps1'
 New-Item -ItemType Directory -Path (Split-Path $payload) -Force | Out-Null
@@ -21,12 +18,12 @@ New-ItemProperty -Path $runKey -Name GloboManticsTelemetry -PropertyType String 
 $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($decodedScript))
 $process = Start-Process "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList '-NoProfile', '-WindowStyle', 'Hidden', '-EncodedCommand', $encoded -PassThru -Wait
 if ($process.ExitCode -ne 0) { throw "Scenario setup failed ($($process.ExitCode))." }
-# Use the process start time for the alert's evidence window.
-New-Item -ItemType Directory -Path 'C:\Lab\Alert' -Force | Out-Null
+#Use the process start time for the alert's evidence window.
+New-Item -ItemType Directory -Path 'C:\Users\Public\Desktop\LAB_FILES\Alert' -Force | Out-Null
 [ordered]@{
     ScenarioId = 'WIN-AI-001'
     AlertUtc = $process.StartTime.ToUniversalTime().ToString('o')
     Signal = 'Hidden Windows PowerShell with EncodedCommand'
     SuggestedSecondsBefore = 5
     SuggestedSecondsAfter = 15
-} | ConvertTo-Json | Set-Content 'C:\Lab\Alert\WIN-AI-001.json' -Encoding UTF8
+} | ConvertTo-Json | Set-Content 'C:\Users\Public\Desktop\LAB_FILES\Alert\WIN-AI-001.json' -Encoding UTF8

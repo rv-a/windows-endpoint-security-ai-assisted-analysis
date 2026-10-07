@@ -1,8 +1,6 @@
-#Requires -RunAsAdministrator
-[CmdletBinding()]
 param(
-    [string]$RawRoot = 'C:\Lab\Evidence\learner-case\raw',
-    [string]$AiRoot = 'C:\Lab\Evidence\learner-case\ai-sanitized',
+    [string]$RawRoot = 'C:\Users\Public\Desktop\LAB_FILES\Evidence\learner-case\raw',
+    [string]$AiRoot = 'C:\Users\Public\Desktop\LAB_FILES\Evidence\learner-case\ai-sanitized',
     [Parameter(Mandatory)][DateTime]$StartUtc,
     [Parameter(Mandatory)][DateTime]$EndUtc,
     [Parameter(Mandatory)][long]$Sysmon1RecordId,
@@ -11,17 +9,9 @@ param(
     [Parameter(Mandatory)][long]$Security4698RecordId
 )
 
-Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$StartUtc = $StartUtc.ToUniversalTime()
-$EndUtc = $EndUtc.ToUniversalTime()
-if ($StartUtc -ge $EndUtc) { throw 'StartUtc must be earlier than EndUtc.' }
-
-$identity = Get-Content 'C:\Lab\State\identity.json' -Raw | ConvertFrom-Json
-foreach ($name in 'UserSid', 'ComputerName', 'UserDomain', 'UserName') {
-    if ([string]::IsNullOrWhiteSpace($identity.$name)) { throw "Missing captured identity: $name" }
-}
+$identity = Get-Content 'C:\ProgramData\EndpointLabSetup\State\identity.json' -Raw | ConvertFrom-Json
 $redactionRules = [ordered]@{
     UserSid = [ordered]@{ Category = 'Current user SID'; Source = [string]$identity.UserSid; Replacement = '<LAB-USER-SID>'; Replacements = 0 }
     Host = [ordered]@{ Category = 'Computer name'; Source = [string]$identity.ComputerName; Replacement = '<LAB-HOST>'; Replacements = 0 }
@@ -87,18 +77,13 @@ $package = [ordered]@{
     GeneratedUtc = [DateTime]::UtcNow.ToString('o')
     WindowUtc = [ordered]@{ Start = $StartUtc.ToString('o'); End = $EndUtc.ToString('o') }
     Sanitization = [ordered]@{ Host = '<LAB-HOST>'; Domain = '<LAB-DOMAIN>'; User = '<LAB-USER>'; Sid = '<LAB-USER-SID>' }
-    ScopeNote = 'Focused endpoint records only. Absence from this package is not proof that an event or behavior did not occur.'
     Records = @($records | Sort-Object { $_.TimeCreatedUtc }, { $_.Source }, { $_.EventId })
 }
 $packagePath = Join-Path $AiRoot 'evidence-package.json'
 $promptPath = Join-Path $AiRoot 'ai-prompt.txt'
-$sourcePromptPath = 'C:\Lab\Analysis\ai-prompt.txt'
-$copyPrompt = [IO.Path]::GetFullPath($promptPath) -ine $sourcePromptPath
-New-Item -ItemType Directory -Path $AiRoot -Force | Out-Null
+$sourcePromptPath = 'C:\Users\Public\Desktop\LAB_FILES\Analysis\ai-prompt.txt'
 $package | ConvertTo-Json -Depth 15 | Set-Content -LiteralPath $packagePath -Encoding UTF8
-if ($copyPrompt) {
-    Copy-Item -LiteralPath $sourcePromptPath -Destination $promptPath -Force
-}
+Copy-Item -LiteralPath $sourcePromptPath -Destination $promptPath -Force
 
 $aiBoundaryPaths = @($packagePath, $promptPath)
 $leaks = @(
@@ -114,34 +99,15 @@ $leaks = @(
 
 $rules = @($redactionRules.Values | ForEach-Object { [pscustomobject]$_ } | Select-Object Category, Replacement, Replacements)
 $redactionReport = [ordered]@{
-    Label = 'Locally confirmed'
-    GeneratedUtc = [DateTime]::UtcNow.ToString('o')
-    Method = 'Build-AIPackage.ps1 replaced the captured identity values it found in the selected event fields. It then checked both files in the AI folder for the original values.'
-    SourceRawValuesIncluded = $false
-    ReplacementCountNote = 'Counts show actual replacements. Zero means those fields had no unique match for that identity value. Another rule may have replaced the same value first.'
     Rules = $rules
-    FieldsScreenedForConfiguredIdentities = $privateFields
-    CorrelationFieldsRetained = @(
-        'Source'
-        'EventId'
-        'TimeCreatedUtc'
-        'RecordId'
-        'ProcessId'
-        'ParentProcessId'
-        'ProcessGuid'
-        'ParentProcessGuid'
-        'Hashes'
-        'ScriptBlockId'
-        'MessageNumber'
-        'MessageTotal'
-        'EventType'
-        'TargetObject'
-        'SubjectLogonId'
-        'TaskName'
-        'ClientProcessId'
+    FieldsChecked = $privateFields
+    RetainedFields = @(
+        'Source', 'EventId', 'TimeCreatedUtc', 'RecordId', 'ProcessId', 'ParentProcessId',
+        'ProcessGuid', 'ParentProcessGuid', 'Hashes', 'ScriptBlockId', 'MessageNumber',
+        'MessageTotal', 'EventType', 'TargetObject', 'SubjectLogonId', 'TaskName', 'ClientProcessId'
     )
     Verification = [ordered]@{
-        AiBoundaryFilesChecked = @($aiBoundaryPaths | ForEach-Object { [IO.Path]::GetFileName($_) } | Sort-Object)
+        FilesChecked = @($aiBoundaryPaths | ForEach-Object { [IO.Path]::GetFileName($_) } | Sort-Object)
         OriginalIdentityLeakCount = $leaks.Count
         TotalReplacements = ($rules | Measure-Object Replacements -Sum).Sum
     }
@@ -150,7 +116,7 @@ $redactionReportPath = Join-Path $RawRoot 'redaction-report.json'
 $redactionReport | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $redactionReportPath -Encoding UTF8
 if ($leaks.Count -gt 0) {
     Remove-Item -LiteralPath $packagePath -Force -ErrorAction SilentlyContinue
-    if ($copyPrompt) { Remove-Item -LiteralPath $promptPath -Force -ErrorAction SilentlyContinue }
+    Remove-Item -LiteralPath $promptPath -Force -ErrorAction SilentlyContinue
     throw 'The AI output still contains a local host, domain, user, or SID value.'
 }
 
@@ -158,6 +124,4 @@ if ($leaks.Count -gt 0) {
     PackagePath = $packagePath
     RedactionReportPath = $redactionReportPath
     RecordCount = $records.Count
-    SelectedRecordIds = @($Sysmon1RecordId, $PowerShell4104RecordId, $Sysmon13RecordId, $Security4698RecordId)
-    IdentityLeakCount = $leaks.Count
 }
